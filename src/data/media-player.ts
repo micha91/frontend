@@ -166,6 +166,8 @@ export interface MediaPlayerItem {
   media_class: string;
   children_media_class: string;
   can_play: boolean;
+  can_search: boolean;
+  search_str: string;
   can_expand: boolean;
   thumbnail?: string;
   children?: MediaPlayerItem[];
@@ -175,13 +177,15 @@ export const browseMediaPlayer = (
   hass: HomeAssistant,
   entityId: string,
   mediaContentId?: string,
-  mediaContentType?: string
+  mediaContentType?: string,
+  searchStr?: string
 ): Promise<MediaPlayerItem> =>
   hass.callWS<MediaPlayerItem>({
     type: "media_player/browse_media",
     entity_id: entityId,
     media_content_id: mediaContentId,
     media_content_type: mediaContentType,
+    search_str: searchStr,
   });
 
 export const browseLocalMediaPlayer = (

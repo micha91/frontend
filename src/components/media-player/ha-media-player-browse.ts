@@ -1,7 +1,7 @@
 import "@material/mwc-button/mwc-button";
 import "@material/mwc-list/mwc-list";
 import "@material/mwc-list/mwc-list-item";
-import { mdiArrowLeft, mdiClose, mdiPlay, mdiPlus } from "@mdi/js";
+import { mdiArrowLeft, mdiClose, mdiMagnify, mdiPlay, mdiPlus } from "@mdi/js";
 import "@polymer/paper-item/paper-item";
 import "@polymer/paper-listbox/paper-listbox";
 import "@polymer/paper-tooltip/paper-tooltip";
@@ -47,6 +47,7 @@ import "../ha-circular-progress";
 import "../ha-fab";
 import "../ha-icon-button";
 import "../ha-svg-icon";
+import "../../common/search/search-input";
 
 declare global {
   interface HASSDomEvents {
@@ -77,6 +78,8 @@ export class HaMediaPlayerBrowse extends LitElement {
   @state() private _loading = false;
 
   @state() private _error?: { message: string; code: string };
+
+  @state() private _searchStr?: string;
 
   @state() private _mediaPlayerItems: MediaPlayerItem[] = [];
 
@@ -220,6 +223,48 @@ export class HaMediaPlayerBrowse extends LitElement {
                       `ui.components.media-browser.${this.action}`
                     )}
                   </mwc-button>
+                `
+              : ""}
+            ${currentItem.can_search &&
+            (!currentItem.thumbnail || !this._narrow)
+              ? html`
+                  <div class="search">
+                    <div class="search-field">
+                      <paper-input
+                        .autofocus=${false}
+                        .label=${this.hass.localize(
+                          "ui.components.data-table.search"
+                        )}
+                        .value=${this._searchStr ? this._searchStr : ""}
+                        @value-changed=${this._updateSearchStr}
+                        .noLabelFloat=${true}
+                        @keypress=${this._searchKeyPress}
+                      >
+                        <slot name="prefix" slot="prefix">
+                          <ha-svg-icon
+                            class="prefix"
+                            .path=${mdiMagnify}
+                          ></ha-svg-icon>
+                        </slot>
+                        ${this._searchStr &&
+                        html`
+                          <ha-icon-button
+                            slot="suffix"
+                            @click=${this._clearSearchStr}
+                            .label=${this.hass.localize("ui.common.clear")}
+                            .path=${mdiClose}
+                          ></ha-icon-button>
+                        `}
+                      </paper-input>
+                    </div>
+                    <mwc-button
+                      class="search-button"
+                      unelevated
+                      @click=${this._search}
+                    >
+                      ${this.hass.localize("ui.components.data-table.search")}
+                    </mwc-button>
+                  </div>
                 `
               : ""}
           </div>
@@ -515,11 +560,64 @@ export class HaMediaPlayerBrowse extends LitElement {
     this._content?.scrollTo(0, 0);
     this._scrolled = false;
     this._mediaPlayerItems = [...this._mediaPlayerItems, itemData];
+    this._searchStr = itemData.search_str;
+  }
+
+  private _updateSearchStr(e) {
+    this._searchStr = e.detail.value;
+  }
+
+  private _clearSearchStr(_e) {
+    this._searchStr = "";
+  }
+
+  private _searchKeyPress(e) {
+    if (e.which === 13 || e.keyCode === 13) {
+      this._search();
+    }
+  }
+
+  private async _search(_e?) {
+    const searchStr = this._searchStr;
+    const currentItem =
+      this._mediaPlayerItems[this._mediaPlayerItems.length - 1];
+
+    this._error = undefined;
+
+    if (!searchStr) {
+      return false;
+    }
+
+    let itemData: MediaPlayerItem;
+
+    try {
+      itemData = await this._fetchData(
+        currentItem.media_content_id,
+        currentItem.media_content_type,
+        searchStr
+      );
+    } catch (err: any) {
+      showAlertDialog(this, {
+        title: this.hass.localize(
+          "ui.components.media-browser.media_browsing_error"
+        ),
+        text: this._renderError(err),
+      });
+      return false;
+    }
+
+    this._content?.scrollTo(0, 0);
+    this._scrolled = false;
+    this._mediaPlayerItems.pop();
+    this._mediaPlayerItems = [...this._mediaPlayerItems, itemData];
+    this._searchStr = itemData.search_str;
+    return false;
   }
 
   private async _fetchData(
     mediaContentId?: string,
-    mediaContentType?: string
+    mediaContentType?: string,
+    searchStr?: string
   ): Promise<MediaPlayerItem> {
     this._loading = true;
     let itemData: any;
@@ -530,7 +628,8 @@ export class HaMediaPlayerBrowse extends LitElement {
               this.hass,
               this.entityId,
               mediaContentId,
-              mediaContentType
+              mediaContentType,
+              searchStr
             )
           : await browseLocalMediaPlayer(this.hass, mediaContentId);
     } finally {
@@ -712,6 +811,32 @@ export class HaMediaPlayerBrowse extends LitElement {
           text-overflow: ellipsis;
           margin-bottom: 0;
           transition: height 0.5s, margin 0.5s;
+        }
+
+        .search {
+          display: flex;
+          flex-direction: row;
+        }
+
+        .search-field {
+          flex: 1;
+        }
+
+        ha-svg-icon,
+        ha-icon-button {
+          color: var(--primary-text-color);
+        }
+        ha-icon-button {
+          --mdc-icon-button-size: 24px;
+        }
+        ha-svg-icon.prefix {
+          margin: 8px;
+        }
+
+        mwc-button.search-button {
+          padding-right: 0;
+          display: flex;
+          align-items: center;
         }
 
         /* ============= CHILDREN ============= */
